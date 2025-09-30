@@ -131,29 +131,37 @@ app.post('/api/filament-types', authenticateToken, async (req, res) => {
  * Endpoint [POST] /api/purchases
  * Dodaje nowy zakup filamentu do bazy danych.
  */
+// Plik: backend/index.js (tylko ten jeden endpoint)
+
 app.post('/api/purchases', authenticateToken, async (req, res) => {
   try {
-    // Odczytujemy dane z frontendu
-    const { filamentTypeId, purchaseDate, initialWeight, price, currency } = req.body;
+    const { filamentTypeId, purchaseDate, initialWeight, price, currency, exchangeRate } = req.body;
 
-    // Prosta walidacja, żeby upewnić się, że mamy wszystkie dane
-    if (!filamentTypeId || !initialWeight || !price) {
+    if (!filamentTypeId || !initialWeight || !price || !exchangeRate) {
       return res.status(400).json({ error: 'Brak wszystkich wymaganych danych.' });
     }
+    
+    // Konwertujemy dane wejściowe na liczby
+    const priceFloat = parseFloat(price);
+    const weightInt = parseInt(initialWeight);
+    const rateFloat = parseFloat(exchangeRate);
 
-    // Obliczamy koszt za gram
-    const costPerGram = price / initialWeight;
+    // Obliczamy cenę w PLN
+    const priceInPLN = priceFloat * rateFloat;
+    // Obliczamy koszt za gram w PLN
+    const costPerGramInPLN = priceInPLN / weightInt;
 
-    // Tworzymy nowy rekord w tabeli Purchase
     const newPurchase = await prisma.purchase.create({
       data: {
-        filamentTypeId: parseInt(filamentTypeId), // Upewniamy się, że to liczba
-        purchaseDate: new Date(purchaseDate || Date.now()), // Jeśli nie ma daty, użyj dzisiejszej
-        initialWeight: parseInt(initialWeight),
-        currentWeight: parseInt(initialWeight), // Na starcie waga aktualna = waga początkowa
-        price: parseFloat(price),
-        currency: currency || 'PLN', // Domyślna waluta
-        costPerGram: costPerGram,
+        filamentTypeId: parseInt(filamentTypeId),
+        purchaseDate: new Date(purchaseDate || Date.now()),
+        initialWeight: weightInt,
+        currentWeight: weightInt,
+        price: priceFloat, // Cena w oryginalnej walucie
+        currency: currency || 'PLN',
+        exchangeRate: rateFloat, // Zapisujemy kurs
+        priceInPLN: priceInPLN, // Zapisujemy przeliczoną cenę
+        costPerGramInPLN: costPerGramInPLN, // Zapisujemy ustandaryzowany koszt
       },
     });
 

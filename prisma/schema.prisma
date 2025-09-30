@@ -25,14 +25,14 @@ model FilamentType {
 // Model dla każdego pojedynczego zakupu szpuli (dla logiki FIFO)
 model Purchase {
   id             Int      @id @default(autoincrement())
-  purchaseDate   DateTime // Kiedy kupiono
-  initialWeight  Int      // Waga początkowa w gramach, np. 1000
-  currentWeight  Int      // Waga, która została (będziemy ją zmniejszać)
-  price          Float    // Cena zakupu, np. 89.99
-  currency       String   // Waluta, np. "PLN"
-  costPerGram    Float    // Koszt za gram, obliczony przy dodawaniu zakupu
-
-  // To jest relacja: ten zakup należy do jednego, konkretnego typu filamentu
+  purchaseDate   DateTime
+  initialWeight  Int
+  currentWeight  Int
+  price          Float    // Cena w oryginalnej walucie
+  currency       String   // Oryginalna waluta (PLN, EUR, USD)
+  exchangeRate   Float    // Kurs wymiany na PLN z dnia zakupu (dla PLN = 1)
+  priceInPLN     Float    // Obliczona cena w PLN (price * exchangeRate)
+  costPerGramInPLN Float  // Obliczony koszt za gram w PLN
   filamentType   FilamentType @relation(fields: [filamentTypeId], references: [id])
   filamentTypeId Int
 }
