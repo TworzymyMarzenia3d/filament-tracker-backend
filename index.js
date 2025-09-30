@@ -10,7 +10,29 @@ const prisma = new PrismaClient();
 const app = express();
 
 // Konfiguracja serwera
-app.use(cors());
+// Importujemy biblioteki...
+const express = require('express');
+const cors = require('cors');
+// ...
+
+// Tworzymy instancje...
+const prisma = new PrismaClient();
+const app = express();
+
+// === NOWA, ROZBUDOWANA KONFIGURACJA CORS ===
+const corsOptions = {
+  origin: '*', // Pozwala na zapytania z dowolnej domeny (idealne do testów)
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // Akceptowane metody HTTP
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Upewniamy się, że zapytania OPTIONS działają poprawnie
+
+app.use(express.json());
+
+// ... reszta Twojego kodu (endpointy /api/login itd.) ...
 app.use(express.json());
 
 // ===================================
