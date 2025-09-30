@@ -113,7 +113,63 @@ app.post('/api/filament-types', authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Nie udało się zapisać danych" });
   }
 });
+/*
+ * Endpoint [POST] /api/purchases
+ * Dodaje nowy zakup filamentu do bazy danych.
+ */
+app.post('/api/purchases', authenticateToken, async (req, res) => {
+  try {
+    // Odczytujemy dane z frontendu
+    const { filamentTypeId, purchaseDate, initialWeight, price, currency } = req.body;
 
+    // Prosta walidacja, żeby upewnić się, że mamy wszystkie dane
+    if (!filamentTypeId || !initialWeight || !price) {
+      return res.status(400).json({ error: 'Brak wszystkich wymaganych danych.' });
+    }
+
+    // Obliczamy koszt za gram
+    const costPerGram = price / initialWeight;
+
+    // Tworzymy nowy rekord w tabeli Purchase
+    const newPurchase = await prisma.purchase.create({
+      data: {
+        filamentTypeId: parseInt(filamentTypeId), // Upewniamy się, że to liczba
+        purchaseDate: new Date(purchaseDate || Date.now()), // Jeśli nie ma daty, użyj dzisiejszej
+        initialWeight: parseInt(initialWeight),
+        currentWeight: parseInt(initialWeight), // Na starcie waga aktualna = waga początkowa
+        price: parseFloat(price),
+        currency: currency || 'PLN', // Domyślna waluta
+        costPerGram: costPerGram,
+      },
+    });
+
+    res.status(201).json(newPurchase);
+  } catch (error) {
+    console.error("Błąd podczas dodawania zakupu:", error);
+    res.status(500).json({ error: "Nie udało się zapisać zakupu." });
+  }
+});
+
+/*
+ * Endpoint [GET] /api/purchases
+ * Pobiera listę wszystkich zakupów wraz z informacjami o typie filamentu.
+ */
+app.get('/api/purchases', authenticateToken, async (req, res) => {
+    try {
+        const purchases = await prisma.purchase.findMany({
+            orderBy: {
+                purchaseDate: 'asc', // Sortujemy od najstarszych (zgodnie z FIFO)
+            },
+            include: {
+                filamentType: true, // Dołączamy powiązane dane o typie filamentu!
+            },
+        });
+        res.json(purchases);
+    } catch (error) {
+        console.error("Błąd podczas pobierania zakupów:", error);
+        res.status(500).json({ error: "Nie udało się pobrać zakupów." });
+    }
+});
 
 // ===================================
 // === Uruchomienie serwera        ===
