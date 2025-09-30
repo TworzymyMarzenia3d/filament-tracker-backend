@@ -1,0 +1,38 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // Prisma odczyta adres bazy z pliku .env
+}
+
+// Model definiujący typ filamentu, np. "Fiberlogy PLA Czarny"
+model FilamentType {
+  id           Int      @id @default(autoincrement())
+  manufacturer String   // Producent, np. "Fiberlogy"
+  material     String   // Materiał, np. "PLA"
+  color        String   // Kolor, np. "Czarny"
+  createdAt    DateTime @default(now())
+
+  // To jest relacja: jeden typ filamentu może mieć wiele zakupów
+  purchases Purchase[]
+}
+
+// Model dla każdego pojedynczego zakupu szpuli (dla logiki FIFO)
+model Purchase {
+  id             Int      @id @default(autoincrement())
+  purchaseDate   DateTime // Kiedy kupiono
+  initialWeight  Int      // Waga początkowa w gramach, np. 1000
+  currentWeight  Int      // Waga, która została (będziemy ją zmniejszać)
+  price          Float    // Cena zakupu, np. 89.99
+  currency       String   // Waluta, np. "PLN"
+  costPerGram    Float    // Koszt za gram, obliczony przy dodawaniu zakupu
+
+  // To jest relacja: ten zakup należy do jednego, konkretnego typu filamentu
+  filamentType   FilamentType @relation(fields: [filamentTypeId], references: [id])
+  filamentTypeId Int
+}
