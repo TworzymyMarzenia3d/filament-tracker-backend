@@ -1,33 +1,90 @@
 // Importujemy potrzebne biblioteki
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken'); // Nowa biblioteka do tokenów
 const { PrismaClient } = require('@prisma/client');
+require('dotenv').config(); // Upewniamy się, że zmienne z .env są dostępne
 
 // Tworzymy instancje naszych narzędzi
-const prisma = new PrismaClient(); // To jest nasz "pilot" do bazy danych
-const app = express(); // To jest nasza aplikacja-serwer
+const prisma = new PrismaClient();
+const app = express();
 
 // Konfiguracja serwera
-app.use(cors()); // Pozwala na komunikację z frontendem z innej domeny/portu
-app.use(express.json()); // Umożliwia serwerowi odczytywanie danych w formacie JSON
+app.use(cors());
+app.use(express.json());
 
 // ===================================
-// === Definicje naszych API Endpointów ===
+// === LOGOWANIE I AUTENTYKACJA    ===
+// ===================================
+
+/*
+ * Endpoint [POST] /api/login
+ * Służy do logowania użytkownika.
+ */
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+
+  // Sprawdzamy, czy hasło z frontendu zgadza się z tym na serwerze
+  if (password && password === process.env.APP_PASSWORD) {
+    // Hasło jest poprawne. Generujemy token JWT, który będzie ważny przez 7 dni.
+    const token = jwt.sign(
+      { access: 'granted' }, // Zawartość tokenu (payload)
+      process.env.JWT_SECRET, // Tajny klucz do podpisu tokenu
+      { expiresIn: '7d' }    // Czas ważności
+    );
+    // Odsyłamy token do frontendu
+    res.json({ token });
+  } else {
+    // Hasło jest niepoprawne lub go nie ma.
+    res.status(401).json({ error: 'Nieprawidłowe hasło' });
+  }
+});
+
+
+/*
+ * Middleware do weryfikacji tokenu
+ * Ta funkcja będzie uruchamiana przed każdym chronionym endpointem.
+ * Sprawdza, czy zapytanie zawiera poprawny i ważny token JWT.
+ */
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  // Token jest przesyłany w nagłówku jako "Bearer TOKEN_STRING"
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) {
+    // Jeśli nie ma tokenu, odmawiamy dostępu
+    return res.status(401).json({ error: 'Brak autoryzacji: token nie został dostarczony.' });
+  }
+
+  // Weryfikujemy, czy token jest poprawny i nie wygasł
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      // Jeśli token jest nieważny (np. wygasł lub jest sfałszowany), odmawiamy dostępu
+      return res.status(403).json({ error: 'Brak autoryzacji: token jest nieprawidłowy.' });
+    }
+    // Jeśli wszystko jest ok, dołączamy dane użytkownika do zapytania i przechodzimy dalej
+    req.user = user;
+    next();
+  });
+};
+
+
+// ===================================
+// === Definicje API Endpointów    ===
 // ===================================
 
 /*
  * Endpoint [GET] /api/filament-types
  * Zwraca listę wszystkich zdefiniowanych typów filamentów.
+ * Jest teraz chroniony przez middleware `authenticateToken`.
  */
-app.get('/api/filament-types', async (req, res) => {
+app.get('/api/filament-types', authenticateToken, async (req, res) => {
   try {
-    // Używamy Prismy, aby znaleźć wszystkie rekordy w tabeli FilamentType
     const filamentTypes = await prisma.filamentType.findMany({
       orderBy: {
-        createdAt: 'desc', // Sortujemy od najnowszych
+        createdAt: 'desc',
       },
     });
-    // Odsyłamy znalezione dane jako odpowiedź w formacie JSON
     res.json(filamentTypes);
   } catch (error) {
     console.error("Błąd podczas pobierania typów filamentów:", error);
@@ -37,22 +94,19 @@ app.get('/api/filament-types', async (req, res) => {
 
 /*
  * Endpoint [POST] /api/filament-types
- * Tworzy nowy typ filamentu na podstawie danych przesłanych z frontendu.
+ * Tworzy nowy typ filamentu.
+ * Również jest chroniony przez middleware `authenticateToken`.
  */
-app.post('/api/filament-types', async (req, res) => {
+app.post('/api/filament-types', authenticateToken, async (req, res) => {
   try {
-    // Odczytujemy dane, które przysłał nam frontend w ciele zapytania
     const { manufacturer, material, color } = req.body;
-
-    // Używamy Prismy, aby stworzyć nowy rekord w tabeli FilamentType
     const newFilamentType = await prisma.filamentType.create({
       data: {
-        manufacturer: manufacturer,
-        material: material,
-        color: color,
+        manufacturer,
+        material,
+        color,
       },
     });
-    // Odsyłamy nowo utworzony obiekt jako potwierdzenie
     res.status(201).json(newFilamentType);
   } catch (error) {
     console.error("Błąd podczas tworzenia typu filamentu:", error);
@@ -62,10 +116,8 @@ app.post('/api/filament-types', async (req, res) => {
 
 
 // ===================================
-// === Uruchomienie serwera ===
+// === Uruchomienie serwera        ===
 // ===================================
-
-// Nasłuchujemy na porcie zdefiniowanym przez Render.com, a lokalnie na 3001
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Serwer uruchomiony na porcie ${PORT}`);
