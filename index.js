@@ -1,40 +1,34 @@
-// Importujemy potrzebne biblioteki
+// ===================================
+// ===         IMPORTY             ===
+// ===================================
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken'); // Nowa biblioteka do tokenów
+const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
-require('dotenv').config(); // Upewniamy się, że zmienne z .env są dostępne
+require('dotenv').config();
 
-// Tworzymy instancje naszych narzędzi
+// ===================================
+// ===    INICJALIZACJA APLIKACJI    ===
+// ===================================
 const prisma = new PrismaClient();
 const app = express();
 
-// Konfiguracja serwera
-// Importujemy biblioteki...
-const express = require('express');
-const cors = require('cors');
-// ...
-
-// Tworzymy instancje...
-const prisma = new PrismaClient();
-const app = express();
-
-// === NOWA, ROZBUDOWANA KONFIGURACJA CORS ===
+// ===================================
+// ===     KONFIGURACJA CORS        ===
+// ===================================
 const corsOptions = {
-  origin: '*', // Pozwala na zapytania z dowolnej domeny (idealne do testów)
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE", // Akceptowane metody HTTP
+  origin: '*',
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
-
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Upewniamy się, że zapytania OPTIONS działają poprawnie
+app.options('*', cors(corsOptions));
 
+// ===================================
+// ===     KONFIGURACJA SERWERA     ===
+// ===================================
 app.use(express.json());
-
-// ... reszta Twojego kodu (endpointy /api/login itd.) ...
-app.use(express.json());
-
 // ===================================
 // === LOGOWANIE I AUTENTYKACJA    ===
 // ===================================
