@@ -1,28 +1,21 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // Prisma odczyta adres bazy z pliku .env
+  url      = env("DATABASE_URL")
 }
 
-// Model definiujący typ filamentu, np. "Fiberlogy PLA Czarny"
 model FilamentType {
   id           Int      @id @default(autoincrement())
-  manufacturer String   // Producent, np. "Fiberlogy"
-  material     String   // Materiał, np. "PLA"
-  color        String   // Kolor, np. "Czarny"
+  manufacturer String
+  material     String
+  color        String
   createdAt    DateTime @default(now())
-
-  // To jest relacja: jeden typ filamentu może mieć wiele zakupów
-  purchases Purchase[]
+  purchases    Purchase[]
 }
 
-// Model dla każdego pojedynczego zakupu szpuli (dla logiki FIFO)
 model Purchase {
   id               Int      @id @default(autoincrement())
   purchaseDate     DateTime
@@ -33,11 +26,25 @@ model Purchase {
   exchangeRate     Float
   priceInPLN       Float
   costPerGramInPLN Float
-  
   filamentType     FilamentType @relation(fields: [filamentTypeId], references: [id])
   filamentTypeId   Int
-
-  // Relacja zwrotna: jedna szpula może być użyta w wielu wydrukach
-  usages           PrintUsage[] // <--- TO JEST TA JEDNA LINIA, KTÓRĄ NALEŻY DODAĆ
+  usages           PrintUsage[]
 }
 
+model PrintJob {
+  id             Int          @id @default(autoincrement())
+  jobName        String
+  createdAt      DateTime     @default(now())
+  totalCostInPLN Float
+  usages         PrintUsage[]
+}
+
+model PrintUsage {
+  id             Int      @id @default(autoincrement())
+  usedWeight     Int
+  calculatedCost Float
+  printJob       PrintJob @relation(fields: [printJobId], references: [id])
+  printJobId     Int
+  purchase       Purchase @relation(fields: [purchaseId], references: [id])
+  purchaseId     Int
+}
