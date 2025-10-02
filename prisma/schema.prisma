@@ -24,15 +24,20 @@ model FilamentType {
 
 // Model dla każdego pojedynczego zakupu szpuli (dla logiki FIFO)
 model Purchase {
-  id             Int      @id @default(autoincrement())
-  purchaseDate   DateTime
-  initialWeight  Int
-  currentWeight  Int
-  price          Float    // Cena w oryginalnej walucie
-  currency       String   // Oryginalna waluta (PLN, EUR, USD)
-  exchangeRate   Float    // Kurs wymiany na PLN z dnia zakupu (dla PLN = 1)
-  priceInPLN     Float    // Obliczona cena w PLN (price * exchangeRate)
-  costPerGramInPLN Float  // Obliczony koszt za gram w PLN
-  filamentType   FilamentType @relation(fields: [filamentTypeId], references: [id])
-  filamentTypeId Int
+  id               Int      @id @default(autoincrement())
+  purchaseDate     DateTime
+  initialWeight    Int
+  currentWeight    Int
+  price            Float
+  currency         String
+  exchangeRate     Float
+  priceInPLN       Float
+  costPerGramInPLN Float
+  
+  filamentType     FilamentType @relation(fields: [filamentTypeId], references: [id])
+  filamentTypeId   Int
+
+  // Relacja zwrotna: jedna szpula może być użyta w wielu wydrukach
+  usages           PrintUsage[] // <--- TO JEST TA JEDNA LINIA, KTÓRĄ NALEŻY DODAĆ
 }
+

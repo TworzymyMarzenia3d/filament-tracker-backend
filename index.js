@@ -192,7 +192,101 @@ app.get('/api/purchases', authenticateToken, async (req, res) => {
         res.status(500).json({ error: "Nie udało się pobrać zakupów." });
     }
 });
+// Plik: backend/index.js (wklej przed app.listen)
 
+/*
+ * Endpoint [POST] /api/print-jobs
+ * Rejestruje nowe zlecenie wydruku i odlicza materiał zgodnie z FIFO.
+ */
+app.post('/api/print-jobs', authenticateToken, async (req, res) => {
+  const { jobName, usages } = req.body; // Oczekujemy nazwy zlecenia i tablicy zużyć
+
+  if (!jobName || !usages || !Array.isArray(usages) || usages.length === 0) {
+    return res.status(400).json({ error: 'Nieprawidłowe dane zlecenia.' });
+  }
+
+  try {
+    // === Transakcja bazodanowa - klucz do bezpieczeństwa danych ===
+    // Jeśli cokolwiek pójdzie nie tak, wszystkie zmiany zostaną cofnięte.
+    const result = await prisma.$transaction(async (tx) => {
+      let totalJobCost = 0;
+      const createdUsages = [];
+
+      // 1. Stwórz wstępny wpis dla zlecenia
+      const printJob = await tx.printJob.create({
+        data: { jobName, totalCostInPLN: 0 }, // Zaczynamy z kosztem 0
+      });
+
+      // 2. Przetwórz każde zgłoszone zużycie
+      for (const usage of usages) {
+        let remainingWeightToLog = parseInt(usage.weightToUse);
+        if (isNaN(remainingWeightToLog) || remainingWeightToLog <= 0) continue;
+
+        // Znajdź wszystkie dostępne szpule danego typu, posortowane od najstarszej (FIFO!)
+        const availableSpools = await tx.purchase.findMany({
+          where: {
+            filamentTypeId: parseInt(usage.filamentTypeId),
+            currentWeight: { gt: 0 }, // Tylko te, na których coś zostało
+          },
+          orderBy: { purchaseDate: 'asc' },
+        });
+
+        if (availableSpools.length === 0) {
+          throw new Error(`Brak dostępnego filamentu typu ID: ${usage.filamentTypeId}`);
+        }
+
+        // 3. Odejmuj wagę z kolejnych szpul
+        for (const spool of availableSpools) {
+          const weightFromThisSpool = Math.min(spool.currentWeight, remainingWeightToLog);
+
+          // Zaktualizuj wagę na szpuli
+          await tx.purchase.update({
+            where: { id: spool.id },
+            data: { currentWeight: spool.currentWeight - weightFromThisSpool },
+          });
+
+          // Oblicz koszt tej porcji
+          const costForThisPortion = weightFromThisSpool * spool.costPerGramInPLN;
+          totalJobCost += costForThisPortion;
+
+          // Zapisz wpis o zużyciu
+          createdUsages.push({
+              printJobId: printJob.id,
+              purchaseId: spool.id,
+              usedWeight: weightFromThisSpool,
+              calculatedCost: costForThisPortion,
+          });
+
+          remainingWeightToLog -= weightFromThisSpool;
+          if (remainingWeightToLog <= 0) break; // Przetworzyliśmy całe zużycie dla tej pozycji
+        }
+
+        // Sprawdź, czy wystarczyło filamentu
+        if (remainingWeightToLog > 0) {
+          throw new Error(`Niewystarczająca ilość filamentu w magazynie dla typu ID: ${usage.filamentTypeId}. Zabrakło ${remainingWeightToLog}g.`);
+        }
+      }
+
+      // 4. Stwórz wszystkie wpisy o zużyciu naraz
+      await tx.printUsage.createMany({
+        data: createdUsages,
+      });
+
+      // 5. Zaktualizuj zlecenie ostatecznym, zsumowanym kosztem
+      const finalPrintJob = await tx.printJob.update({
+          where: { id: printJob.id },
+          data: { totalCostInPLN: totalJobCost },
+      });
+      
+      return finalPrintJob;
+    });
+
+    res.status(201).json(result);
+  } catch (error) {
+    console.error("Błąd podczas przetwarzania zlecenia FIFO:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // ===================================
 // === Uruchomienie serwera        ===
 // ===================================
