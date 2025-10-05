@@ -1,4 +1,4 @@
-// OSTATECZNA WERSJA - schema.prisma
+// Plik: backend/prisma/schema.prisma (Wersja z polami dla filamentów)
 
 generator client {
   provider = "prisma-client-js"
@@ -9,37 +9,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ===================================
-// ===     MODUŁ MAGAZYNU (ERP)    ===
-// ===================================
+// === ZUNIFIKOWANE MODELE MAGAZYNOWE ===
 
-// Kategoria produktu, aby można było grupować koszty (np. "Filamenty", "Żywice", "Koszty Pracy")
 model ProductCategory {
   id       Int       @id @default(autoincrement())
   name     String    @unique
   products Product[]
 }
 
-// Uniwersalny model Produktu/Usługi
 model Product {
-  id               Int      @id @default(autoincrement())
-  name             String   @unique // Pełna nazwa, np. "Fiberlogy PLA Czarny 1.75mm" lub "Czas Pracy"
-  unit             String   // "g", "ml", "szt", "kWh", "h" (godzina)
-  lowStockAlert    Float?   // Opcjonalny próg alertu o niskim stanie
+  id                    Int      @id @default(autoincrement())
+  name                  String   @unique
+  unit                  String
+  lowStockAlert         Float?
 
-  category         ProductCategory @relation(fields: [categoryId], references: [id])
-  categoryId       Int
+  category              ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId            Int
 
-  purchases        Purchase[]
-  orderItems       OrderItem[]
-  quotationItems   QuotationItem[]
+  // --- Atrybuty specyficzne dla filamentu (opcjonalne) ---
+  filament_manufacturer String?
+  filament_material     String?
+  filament_color        String?
+  filament_diameter     Float?
+
+  purchases             Purchase[]
+  orderItems            OrderItem[]
+  quotationItems        QuotationItem[]
 }
 
-// Uniwersalny model Zakupu
 model Purchase {
   id                Int      @id @default(autoincrement())
   purchaseDate      DateTime
-  vendorName        String?  // Nazwa dostawcy/sklepu
+  vendorName        String?
   initialQuantity   Float
   currentQuantity   Float
   price             Float
@@ -55,9 +56,7 @@ model Purchase {
   quotationItemUsages QuotationItemUsage[]
 }
 
-// ===================================
-// ===         MODUŁ CRM           ===
-// ===================================
+// === MODELE CRM ===
 
 model Client {
   id      Int      @id @default(autoincrement())
@@ -70,45 +69,40 @@ model Client {
   orders  Order[]
 }
 
-// ===================================
-// === MODUŁ ZAMÓWIEŃ I WYCEN      ===
-// ===================================
+// === MODELE ZAMÓWIEŃ I WYCEN ===
 
-// Model Zamówienia
 model Order {
   id              Int      @id @default(autoincrement())
-  orderNumber     String   @unique // Numer zamówienia, np. ZAM/2024/10/01
+  orderNumber     String   @unique
   orderName       String
   createdAt       DateTime @default(now())
-  status          String   // "Wycena", "Oczekuje na akceptację", "W realizacji", "Zakończone"
-  acceptedPrice   Float?   // Zaakceptowana cena sprzedaży
+  status          String
+  acceptedPrice   Float?
   
   client          Client    @relation(fields: [clientId], references: [id])
   clientId        Int
   
-  items           OrderItem[] // Pozycje w zamówieniu
-  invoice         Invoice?    // Powiązana faktura
+  items           OrderItem[]
+  invoice         Invoice?
 }
 
-// Pozycja w zamówieniu (zużycie materiału/usługi)
 model OrderItem {
   id              Int      @id @default(autoincrement())
-  description     String?  // Opis, co jest robione, np. "Wydruk obudowy"
-  markupPercent   Float    @default(0) // Narzut w %, np. 20
+  description     String?
+  markupPercent   Float    @default(0)
   
-  calculatedCost  Float    // Sumaryczny koszt materiałów dla tej pozycji
-  sellingPrice    Float    // Obliczona cena sprzedaży (koszt + narzut)
+  calculatedCost  Float
+  sellingPrice    Float
   
   order           Order    @relation(fields: [orderId], references: [id])
   orderId         Int
   
   product         Product  @relation(fields: [productId], references: [id])
-  productId       Int      // Jaki produkt/usługa jest rozliczana
+  productId       Int
   
   usages          OrderItemUsage[]
 }
 
-// Szczegółowy zapis zużycia dla pozycji w zamówieniu (logika FIFO)
 model OrderItemUsage {
   id             Int      @id @default(autoincrement())
   usedQuantity   Float
@@ -120,8 +114,6 @@ model OrderItemUsage {
   purchase       Purchase @relation(fields: [purchaseId], references: [id])
   purchaseId     Int
 }
-
-// --- Modele do Wycen (symulacji) ---
 
 model Quotation {
   id             Int      @id @default(autoincrement())
@@ -161,9 +153,7 @@ model QuotationItemUsage {
   purchaseId     Int
 }
 
-// ===================================
-// ===     MODUŁ FAKTUROWANIA      ===
-// ===================================
+// === MODUŁ FAKTUROWANIA ===
 
 model Invoice {
   id             Int      @id @default(autoincrement())
@@ -171,28 +161,26 @@ model Invoice {
   issueDate      DateTime @default(now())
   dueDate        DateTime
   
-  totalNet       Float // Netto
-  totalVat       Float // Kwota VAT
-  totalGross     Float // Brutto
+  totalNet       Float
+  totalVat       Float
+  totalGross     Float
   
-  paymentMethod  String   // "Przelew", "Blik", "Gotówka"
+  paymentMethod  String
   isPaid         Boolean  @default(false)
   
   order          Order    @relation(fields: [orderId], references: [id])
   orderId        Int      @unique
 }
 
-// ===================================
-// ===   MODUŁ USTAWIEŃ I NOTATEK  ===
-// ===================================
+// === MODUŁ USTAWIEŃ I NOTATEK ===
 
 model AppSettings {
-  id             Int    @id @default(1)
-  companyName    String
-  companyNip     String
-  companyAddress String
-  bankAccount    String
-  invoiceNumberingFormat String // np. "{YYYY}/{MM}/{NR}"
+  id                     Int    @id @default(1)
+  companyName            String
+  companyNip             String
+  companyAddress         String
+  bankAccount            String
+  invoiceNumberingFormat String
 }
 
 model Note {
