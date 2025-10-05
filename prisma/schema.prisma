@@ -1,7 +1,13 @@
-// OSTATECZNA WERSJA v3 - schema.prisma
+// OSTATECZNA WERSJA v3 - POPRAWNIE SFORMATOWANA
 
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql", url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 // ===================================
 // ===     MODUŁ MAGAZYNU (ERP)    ===
@@ -9,56 +15,53 @@ datasource db { provider = "postgresql", url = env("DATABASE_URL") }
 
 model ProductCategory {
   id       Int       @id @default(autoincrement())
-  name     String    @unique // "Filament", "Żywica", "Komponent", "Usługa", "Koszt"
+  name     String    @unique
   products Product[]
 }
 
 model Product {
-  id               Int      @id @default(autoincrement())
-  
-  // -- Pola Ogólne (dla wszystkich kategorii) --
-  name             String   // Wygenerowana lub wpisana ręcznie nazwa
-  unit             String   // "g", "ml", "szt", "kWh", "h"
-  lowStockAlert    Float?   
-  
-  // -- Pola Specyficzne dla Kategorii "Filament" (opcjonalne) --
-  manufacturer     String?  // Producent
-  materialType     String?  // Typ materiału (PLA, PETG)
-  color            String?  // Kolor
-  diameter         Float?   // Średnica
+  id            Int      @id @default(autoincrement())
+  name          String
+  unit          String
+  lowStockAlert Float?
 
-  category         ProductCategory @relation(fields: [categoryId], references: [id])
-  categoryId       Int
+  manufacturer  String?
+  materialType  String?
+  color         String?
+  diameter      Float?
 
-  purchases        Purchase[]
-  orderItems       OrderItem[]
-  quotationItems   QuotationItem[]
+  category      ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId    Int
 
-  @@unique([name]) // Nazwa produktu musi być unikalna
+  purchases     Purchase[]
+  orderItems    OrderItem[]
+  quotationItems QuotationItem[]
+
+  @@unique([name])
 }
 
 model Purchase {
-  // ... bez zmian
-  id                Int      @id @default(autoincrement())
-  purchaseDate      DateTime
-  vendorName        String?
-  initialQuantity   Float
-  currentQuantity   Float
-  price             Float
-  currency          String
-  exchangeRate      Float
-  priceInPLN        Float
-  costPerUnitInPLN  Float
-  
-  product           Product  @relation(fields: [productId], references: [id])
-  productId         Int
-  
-  orderItemUsages   OrderItemUsage[]
+  id                  Int      @id @default(autoincrement())
+  purchaseDate        DateTime
+  vendorName          String?
+  initialQuantity     Float
+  currentQuantity     Float
+  price               Float
+  currency            String
+  exchangeRate        Float
+  priceInPLN          Float
+  costPerUnitInPLN    Float
+
+  product             Product  @relation(fields: [productId], references: [id])
+  productId           Int
+
+  orderItemUsages     OrderItemUsage[]
   quotationItemUsages QuotationItemUsage[]
 }
 
-// ... reszta modeli (Client, Order, itd.) pozostaje BEZ ZMIAN z poprzedniej wersji ...
-// ... (Wklejam je poniżej, żebyś miał cały, kompletny plik) ...
+// ===================================
+// ===         MODUŁ CRM           ===
+// ===================================
 
 model Client {
   id      Int      @id @default(autoincrement())
@@ -71,111 +74,123 @@ model Client {
   orders  Order[]
 }
 
+// ===================================
+// === MODUŁ ZAMÓWIEŃ I WYCEN      ===
+// ===================================
+
 model Order {
-  id              Int      @id @default(autoincrement())
-  orderNumber     String   @unique
-  orderName       String
-  createdAt       DateTime @default(now())
-  status          String
-  acceptedPrice   Float?
-  
-  client          Client    @relation(fields: [clientId], references: [id])
-  clientId        Int
-  
-  items           OrderItem[]
-  invoice         Invoice?
+  id            Int      @id @default(autoincrement())
+  orderNumber   String   @unique
+  orderName     String
+  createdAt     DateTime @default(now())
+  status        String
+  acceptedPrice Float?
+
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      Int
+
+  items         OrderItem[]
+  invoice       Invoice?
 }
 
 model OrderItem {
-  id              Int      @id @default(autoincrement())
-  description     String?
-  markupPercent   Float    @default(0)
-  
-  calculatedCost  Float
-  sellingPrice    Float
-  
-  order           Order    @relation(fields: [orderId], references: [id])
-  orderId         Int
-  
-  product         Product  @relation(fields: [productId], references: [id])
-  productId       Int
-  
-  usages          OrderItemUsage[]
+  id             Int      @id @default(autoincrement())
+  description    String?
+  markupPercent  Float    @default(0)
+
+  calculatedCost Float
+  sellingPrice   Float
+
+  order          Order    @relation(fields: [orderId], references: [id])
+  orderId        Int
+
+  product        Product  @relation(fields: [productId], references: [id])
+  productId      Int
+
+  usages         OrderItemUsage[]
 }
 
 model OrderItemUsage {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   usedQuantity   Float
   calculatedCost Float
-  
+
   orderItem      OrderItem @relation(fields: [orderItemId], references: [id])
   orderItemId    Int
-  
-  purchase       Purchase @relation(fields: [purchaseId], references: [id])
+
+  purchase       Purchase  @relation(fields: [purchaseId], references: [id])
   purchaseId     Int
 }
 
 model Quotation {
-  id             Int      @id @default(autoincrement())
-  quotationNumber String  @unique
-  quotationName  String
-  createdAt      DateTime @default(now())
-  
-  items          QuotationItem[]
+  id              Int      @id @default(autoincrement())
+  quotationNumber String   @unique
+  quotationName   String
+  createdAt       DateTime @default(now())
+
+  items           QuotationItem[]
 }
 
 model QuotationItem {
   id              Int      @id @default(autoincrement())
   description     String?
   markupPercent   Float    @default(0)
-  
+
   calculatedCost  Float
   sellingPrice    Float
-  
+
   quotation       Quotation @relation(fields: [quotationId], references: [id])
   quotationId     Int
-  
-  product         Product  @relation(fields: [productId], references: [id])
+
+  product         Product   @relation(fields: [productId], references: [id])
   productId       Int
-  
+
   usages          QuotationItemUsage[]
 }
 
 model QuotationItemUsage {
-  id             Int      @id @default(autoincrement())
-  usedQuantity   Float
-  calculatedCost Float
-  
-  quotationItem  QuotationItem @relation(fields: [quotationItemId], references: [id])
+  id              Int      @id @default(autoincrement())
+  usedQuantity    Float
+  calculatedCost  Float
+
+  quotationItem   QuotationItem @relation(fields: [quotationItemId], references: [id])
   quotationItemId Int
-  
-  purchase       Purchase @relation(fields: [purchaseId], references: [id])
-  purchaseId     Int
+
+  purchase        Purchase      @relation(fields: [purchaseId], references: [id])
+  purchaseId      Int
 }
+
+// ===================================
+// ===     MODUŁ FAKTUROWANIA      ===
+// ===================================
 
 model Invoice {
-  id             Int      @id @default(autoincrement())
-  invoiceNumber  String   @unique
-  issueDate      DateTime @default(now())
-  dueDate        DateTime
-  
-  totalNet       Float
-  totalVat       Float
-  totalGross     Float
-  
-  paymentMethod  String
-  isPaid         Boolean  @default(false)
-  
-  order          Order    @relation(fields: [orderId], references: [id])
-  orderId        Int      @unique
+  id            Int      @id @default(autoincrement())
+  invoiceNumber String   @unique
+  issueDate     DateTime @default(now())
+  dueDate       DateTime
+
+  totalNet      Float
+  totalVat      Float
+  totalGross    Float
+
+  paymentMethod String
+  isPaid        Boolean  @default(false)
+
+  order         Order    @relation(fields: [orderId], references: [id])
+  orderId       Int      @unique
 }
 
+// ===================================
+// ===   MODUŁ USTAWIEŃ I NOTATEK  ===
+// ===================================
+
 model AppSettings {
-  id             Int    @id @default(1)
-  companyName    String
-  companyNip     String
-  companyAddress String
-  bankAccount    String
+  id                     Int    @id @default(1)
+  companyName            String
+  companyNip             String
+  companyAddress         String
+  bankAccount            String
   invoiceNumberingFormat String
 }
 
