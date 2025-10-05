@@ -1,39 +1,19 @@
-// Plik: backend/index.js
+// Plik: backend/index.js (Wersja dla Finalnej Architektury)
 
-// ===================================
-// ===         IMPORTY             ===
-// ===================================
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
-// ===================================
-// ===    INICJALIZACJA APLIKACJI    ===
-// ===================================
 const prisma = new PrismaClient();
 const app = express();
 
-// ===================================
-// ===     KONFIGURACJA CORS        ===
-// ===================================
-const corsOptions = {
-  origin: '*',
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
+const corsOptions = { origin: '*', methods: "GET,HEAD,PUT,PATCH,POST,DELETE" };
 app.use(cors(corsOptions));
-
-// ===================================
-// ===     KONFIGURACJA SERWERA     ===
-// ===================================
 app.use(express.json());
 
-// ===================================
-// === LOGOWANIE I AUTENTYKACJA    ===
-// ===================================
+// === LOGOWANIE I AUTENTYKACJA (bez zmian) ===
 app.post('/api/login', (req, res) => {
   const { password } = req.body;
   if (password && password === process.env.APP_PASSWORD) {
@@ -43,8 +23,7 @@ app.post('/api/login', (req, res) => {
     res.status(401).json({ error: 'Nieprawidłowe hasło' });
   }
 });
-
-const authenticateToken = (req, res, next) => {
+const authMiddleware = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (token == null) return res.status(401).json({ error: 'Brak autoryzacji' });
@@ -56,42 +35,56 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ===================================
-// ===      API: MAGAZYN           ===
+// ===     API: MODUŁ MAGAZYNU     ===
 // ===================================
 
-// --- Filament Types ---
-app.get('/api/filament-types', authenticateToken, async (req, res) => {
-  const filamentTypes = await prisma.filamentType.findMany({ orderBy: { createdAt: 'desc' } });
-  res.json(filamentTypes);
+// --- Kategorie Produktów ---
+app.get('/api/product-categories', authMiddleware, async (req, res) => {
+    const categories = await prisma.productCategory.findMany({ orderBy: { name: 'asc' } });
+    res.json(categories);
 });
-app.post('/api/filament-types', authenticateToken, async (req, res) => {
-  const { manufacturer, material, color } = req.body;
-  const newFilamentType = await prisma.filamentType.create({ data: { manufacturer, material, color } });
-  res.status(201).json(newFilamentType);
+app.post('/api/product-categories', authMiddleware, async (req, res) => {
+    const { name } = req.body;
+    const newCategory = await prisma.productCategory.create({ data: { name } });
+    res.status(201).json(newCategory);
 });
 
-// --- Purchases ---
-app.get('/api/purchases', authenticateToken, async (req, res) => {
+// --- Produkty (Uniwersalne) ---
+app.get('/api/products', authMiddleware, async (req, res) => {
+  const products = await prisma.product.findMany({ orderBy: { name: 'asc' }, include: { category: true } });
+  res.json(products);
+});
+app.post('/api/products', authMiddleware, async (req, res) => {
+  const { name, unit, categoryId, lowStockAlert } = req.body;
+  const newProduct = await prisma.product.create({ 
+      data: { name, unit, categoryId: parseInt(categoryId), lowStockAlert: lowStockAlert ? parseFloat(lowStockAlert) : null } 
+  });
+  res.status(201).json(newProduct);
+});
+
+// --- Zakupy (Uniwersalne) ---
+app.get('/api/purchases', authMiddleware, async (req, res) => {
     const purchases = await prisma.purchase.findMany({
-        orderBy: { purchaseDate: 'asc' }, include: { filamentType: true },
+        orderBy: { purchaseDate: 'asc' }, include: { product: true },
     });
     res.json(purchases);
 });
-app.post('/api/purchases', authenticateToken, async (req, res) => {
-  const { filamentTypeId, purchaseDate, initialWeight, price, currency, exchangeRate } = req.body;
+app.post('/api/purchases', authMiddleware, async (req, res) => {
+  const { productId, purchaseDate, initialQuantity, price, currency, exchangeRate, vendorName } = req.body;
   const priceFloat = parseFloat(price);
-  const weightInt = parseInt(initialWeight);
+  const quantityFloat = parseFloat(initialQuantity);
   const rateFloat = parseFloat(exchangeRate);
   const priceInPLN = priceFloat * rateFloat;
-  const costPerGramInPLN = priceInPLN / weightInt;
+  const costPerUnitInPLN = priceInPLN / quantityFloat;
   const newPurchase = await prisma.purchase.create({
     data: {
-      filamentTypeId: parseInt(filamentTypeId),
+      productId: parseInt(productId),
       purchaseDate: new Date(purchaseDate || Date.now()),
-      initialWeight: weightInt, currentWeight: weightInt,
+      vendorName,
+      initialQuantity: quantityFloat, currentQuantity: quantityFloat,
       price: priceFloat, currency: currency || 'PLN',
       exchangeRate: rateFloat, priceInPLN: priceInPLN,
-      costPerGramInPLN: costPerGramInPLN,
+      costPerUnitInPLN: costPerUnitInPLN,
     },
   });
   res.status(201).json(newPurchase);
@@ -99,90 +92,21 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
 
 
 // ===================================
-// ===         API: CRM             ===
+// ===     API: MODUŁ CRM          ===
 // ===================================
 
-// --- Clients ---
-app.get('/api/clients', authenticateToken, async (req, res) => {
+// --- Klienci ---
+app.get('/api/clients', authMiddleware, async (req, res) => {
     const clients = await prisma.client.findMany({ orderBy: { name: 'asc' } });
     res.json(clients);
 });
-app.post('/api/clients', authenticateToken, async (req, res) => {
-    const { name, contact, notes } = req.body;
-    const newClient = await prisma.client.create({ data: { name, contact, notes } });
+app.post('/api/clients', authMiddleware, async (req, res) => {
+    const { name, nip, address, phone, email, notes } = req.body;
+    const newClient = await prisma.client.create({ data: { name, nip, address, phone, email, notes } });
     res.status(201).json(newClient);
 });
 
-// --- Orders ---
-app.get('/api/orders', authenticateToken, async (req, res) => {
-    const orders = await prisma.order.findMany({
-        orderBy: { createdAt: 'desc' },
-        include: { client: true, printJobs: true },
-    });
-    res.json(orders);
-});
-app.post('/api/orders', authenticateToken, async (req, res) => {
-    const { orderName, clientId, status } = req.body;
-    const newOrder = await prisma.order.create({
-        data: {
-            orderName,
-            clientId: parseInt(clientId),
-            status: status || 'Nowe',
-        }
-    });
-    res.status(201).json(newOrder);
-});
-
-
-// --- Print Jobs (Logika FIFO) ---
-app.post('/api/print-jobs', authenticateToken, async (req, res) => {
-  const { orderId, description, usages } = req.body;
-  if (!orderId || !usages || !Array.isArray(usages) || usages.length === 0) {
-    return res.status(400).json({ error: 'Nieprawidłowe dane zlecenia.' });
-  }
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      let totalJobCost = 0;
-      const createdUsages = [];
-      const printJob = await tx.printJob.create({
-        data: { description, orderId: parseInt(orderId), totalCostInPLN: 0 },
-      });
-      for (const usage of usages) {
-        let remainingWeightToLog = parseInt(usage.weightToUse);
-        if (isNaN(remainingWeightToLog) || remainingWeightToLog <= 0) continue;
-        const availableSpools = await tx.purchase.findMany({
-          where: { filamentTypeId: parseInt(usage.filamentTypeId), currentWeight: { gt: 0 } },
-          orderBy: { purchaseDate: 'asc' },
-        });
-        if (availableSpools.length === 0) throw new Error(`Brak filamentu typu ID: ${usage.filamentTypeId}`);
-        for (const spool of availableSpools) {
-          const weightFromThisSpool = Math.min(spool.currentWeight, remainingWeightToLog);
-          await tx.purchase.update({
-            where: { id: spool.id }, data: { currentWeight: spool.currentWeight - weightFromThisSpool },
-          });
-          const costForThisPortion = weightFromThisSpool * spool.costPerGramInPLN;
-          totalJobCost += costForThisPortion;
-          createdUsages.push({
-              printJobId: printJob.id, purchaseId: spool.id,
-              usedWeight: weightFromThisSpool, calculatedCost: costForThisPortion,
-          });
-          remainingWeightToLog -= weightFromThisSpool;
-          if (remainingWeightToLog <= 0) break;
-        }
-        if (remainingWeightToLog > 0) throw new Error(`Niewystarczająca ilość filamentu w magazynie dla typu ID: ${usage.filamentTypeId}. Zabrakło ${remainingWeightToLog}g.`);
-      }
-      await tx.printUsage.createMany({ data: createdUsages });
-      const finalPrintJob = await tx.printJob.update({
-          where: { id: printJob.id }, data: { totalCostInPLN: totalJobCost },
-      });
-      return finalPrintJob;
-    });
-    res.status(201).json(result);
-  } catch (error) {
-    console.error("Błąd podczas przetwarzania zlecenia FIFO:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// TODO: API dla Zamówień, Wycen i Fakturowania zostanie dodane w kolejnych krokach.
 
 // ===================================
 // ===     URUCHOMIENIE SERWERA     ===

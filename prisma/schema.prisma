@@ -1,4 +1,4 @@
-// Plik: backend/prisma/schema.prisma
+// OSTATECZNA WERSJA - schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -9,68 +9,195 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// === MODELE ZWIĄZANE Z MAGAZYNEM ===
+// ===================================
+// ===     MODUŁ MAGAZYNU (ERP)    ===
+// ===================================
 
-model FilamentType {
-  id           Int      @id @default(autoincrement())
-  manufacturer String
-  material     String
-  color        String
-  createdAt    DateTime @default(now())
-  purchases    Purchase[]
+// Kategoria produktu, aby można było grupować koszty (np. "Filamenty", "Żywice", "Koszty Pracy")
+model ProductCategory {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
 }
 
-model Purchase {
+// Uniwersalny model Produktu/Usługi
+model Product {
   id               Int      @id @default(autoincrement())
-  purchaseDate     DateTime
-  initialWeight    Int
-  currentWeight    Int
-  price            Float
-  currency         String
-  exchangeRate     Float
-  priceInPLN       Float
-  costPerGramInPLN Float
-  filamentType     FilamentType @relation(fields: [filamentTypeId], references: [id])
-  filamentTypeId   Int
-  usages           PrintUsage[]
+  name             String   @unique // Pełna nazwa, np. "Fiberlogy PLA Czarny 1.75mm" lub "Czas Pracy"
+  unit             String   // "g", "ml", "szt", "kWh", "h" (godzina)
+  lowStockAlert    Float?   // Opcjonalny próg alertu o niskim stanie
+
+  category         ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId       Int
+
+  purchases        Purchase[]
+  orderItems       OrderItem[]
+  quotationItems   QuotationItem[]
 }
 
-// === NOWE MODELE ZWIĄZANE Z CRM ===
+// Uniwersalny model Zakupu
+model Purchase {
+  id                Int      @id @default(autoincrement())
+  purchaseDate      DateTime
+  vendorName        String?  // Nazwa dostawcy/sklepu
+  initialQuantity   Float
+  currentQuantity   Float
+  price             Float
+  currency          String
+  exchangeRate      Float
+  priceInPLN        Float
+  costPerUnitInPLN  Float
+  
+  product           Product  @relation(fields: [productId], references: [id])
+  productId         Int
+  
+  orderItemUsages   OrderItemUsage[]
+  quotationItemUsages QuotationItemUsage[]
+}
+
+// ===================================
+// ===         MODUŁ CRM           ===
+// ===================================
 
 model Client {
   id      Int      @id @default(autoincrement())
   name    String   @unique
-  contact String?
+  nip     String?
+  address String?
+  phone   String?
+  email   String?
   notes   String?
   orders  Order[]
 }
 
+// ===================================
+// === MODUŁ ZAMÓWIEŃ I WYCEN      ===
+// ===================================
+
+// Model Zamówienia
 model Order {
-  id        Int       @id @default(autoincrement())
-  orderName String
-  createdAt DateTime  @default(now())
-  status    String    // Np. "Nowe", "W trakcie", "Zakończone"
-  client    Client    @relation(fields: [clientId], references: [id])
-  clientId  Int
-  printJobs PrintJob[]
+  id              Int      @id @default(autoincrement())
+  orderNumber     String   @unique // Numer zamówienia, np. ZAM/2024/10/01
+  orderName       String
+  createdAt       DateTime @default(now())
+  status          String   // "Wycena", "Oczekuje na akceptację", "W realizacji", "Zakończone"
+  acceptedPrice   Float?   // Zaakceptowana cena sprzedaży
+  
+  client          Client    @relation(fields: [clientId], references: [id])
+  clientId        Int
+  
+  items           OrderItem[] // Pozycje w zamówieniu
+  invoice         Invoice?    // Powiązana faktura
 }
 
-model PrintJob {
-  id             Int          @id @default(autoincrement())
-  description    String?      // Opis, np. "Figurka smoka, 2 szt."
-  createdAt      DateTime     @default(now())
-  totalCostInPLN Float
-  order          Order        @relation(fields: [orderId], references: [id])
-  orderId        Int
-  usages         PrintUsage[]
+// Pozycja w zamówieniu (zużycie materiału/usługi)
+model OrderItem {
+  id              Int      @id @default(autoincrement())
+  description     String?  // Opis, co jest robione, np. "Wydruk obudowy"
+  markupPercent   Float    @default(0) // Narzut w %, np. 20
+  
+  calculatedCost  Float    // Sumaryczny koszt materiałów dla tej pozycji
+  sellingPrice    Float    // Obliczona cena sprzedaży (koszt + narzut)
+  
+  order           Order    @relation(fields: [orderId], references: [id])
+  orderId         Int
+  
+  product         Product  @relation(fields: [productId], references: [id])
+  productId       Int      // Jaki produkt/usługa jest rozliczana
+  
+  usages          OrderItemUsage[]
 }
 
-model PrintUsage {
+// Szczegółowy zapis zużycia dla pozycji w zamówieniu (logika FIFO)
+model OrderItemUsage {
   id             Int      @id @default(autoincrement())
-  usedWeight     Int
+  usedQuantity   Float
   calculatedCost Float
-  printJob       PrintJob @relation(fields: [printJobId], references: [id])
-  printJobId     Int
+  
+  orderItem      OrderItem @relation(fields: [orderItemId], references: [id])
+  orderItemId    Int
+  
   purchase       Purchase @relation(fields: [purchaseId], references: [id])
   purchaseId     Int
+}
+
+// --- Modele do Wycen (symulacji) ---
+
+model Quotation {
+  id             Int      @id @default(autoincrement())
+  quotationNumber String  @unique
+  quotationName  String
+  createdAt      DateTime @default(now())
+  
+  items          QuotationItem[]
+}
+
+model QuotationItem {
+  id              Int      @id @default(autoincrement())
+  description     String?
+  markupPercent   Float    @default(0)
+  
+  calculatedCost  Float
+  sellingPrice    Float
+  
+  quotation       Quotation @relation(fields: [quotationId], references: [id])
+  quotationId     Int
+  
+  product         Product  @relation(fields: [productId], references: [id])
+  productId       Int
+  
+  usages          QuotationItemUsage[]
+}
+
+model QuotationItemUsage {
+  id             Int      @id @default(autoincrement())
+  usedQuantity   Float
+  calculatedCost Float
+  
+  quotationItem  QuotationItem @relation(fields: [quotationItemId], references: [id])
+  quotationItemId Int
+  
+  purchase       Purchase @relation(fields: [purchaseId], references: [id])
+  purchaseId     Int
+}
+
+// ===================================
+// ===     MODUŁ FAKTUROWANIA      ===
+// ===================================
+
+model Invoice {
+  id             Int      @id @default(autoincrement())
+  invoiceNumber  String   @unique
+  issueDate      DateTime @default(now())
+  dueDate        DateTime
+  
+  totalNet       Float // Netto
+  totalVat       Float // Kwota VAT
+  totalGross     Float // Brutto
+  
+  paymentMethod  String   // "Przelew", "Blik", "Gotówka"
+  isPaid         Boolean  @default(false)
+  
+  order          Order    @relation(fields: [orderId], references: [id])
+  orderId        Int      @unique
+}
+
+// ===================================
+// ===   MODUŁ USTAWIEŃ I NOTATEK  ===
+// ===================================
+
+model AppSettings {
+  id             Int    @id @default(1)
+  companyName    String
+  companyNip     String
+  companyAddress String
+  bankAccount    String
+  invoiceNumberingFormat String // np. "{YYYY}/{MM}/{NR}"
+}
+
+model Note {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  createdAt DateTime @default(now())
 }
