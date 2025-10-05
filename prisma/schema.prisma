@@ -1,43 +1,44 @@
-// Plik: backend/prisma/schema.prisma (Wersja z polami dla filamentów)
+// OSTATECZNA WERSJA v3 - schema.prisma
 
-generator client {
-  provider = "prisma-client-js"
-}
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql", url = env("DATABASE_URL") }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-// === ZUNIFIKOWANE MODELE MAGAZYNOWE ===
+// ===================================
+// ===     MODUŁ MAGAZYNU (ERP)    ===
+// ===================================
 
 model ProductCategory {
   id       Int       @id @default(autoincrement())
-  name     String    @unique
+  name     String    @unique // "Filament", "Żywica", "Komponent", "Usługa", "Koszt"
   products Product[]
 }
 
 model Product {
-  id                    Int      @id @default(autoincrement())
-  name                  String   @unique
-  unit                  String
-  lowStockAlert         Float?
+  id               Int      @id @default(autoincrement())
+  
+  // -- Pola Ogólne (dla wszystkich kategorii) --
+  name             String   // Wygenerowana lub wpisana ręcznie nazwa
+  unit             String   // "g", "ml", "szt", "kWh", "h"
+  lowStockAlert    Float?   
+  
+  // -- Pola Specyficzne dla Kategorii "Filament" (opcjonalne) --
+  manufacturer     String?  // Producent
+  materialType     String?  // Typ materiału (PLA, PETG)
+  color            String?  // Kolor
+  diameter         Float?   // Średnica
 
-  category              ProductCategory @relation(fields: [categoryId], references: [id])
-  categoryId            Int
+  category         ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId       Int
 
-  // --- Atrybuty specyficzne dla filamentu (opcjonalne) ---
-  filament_manufacturer String?
-  filament_material     String?
-  filament_color        String?
-  filament_diameter     Float?
+  purchases        Purchase[]
+  orderItems       OrderItem[]
+  quotationItems   QuotationItem[]
 
-  purchases             Purchase[]
-  orderItems            OrderItem[]
-  quotationItems        QuotationItem[]
+  @@unique([name]) // Nazwa produktu musi być unikalna
 }
 
 model Purchase {
+  // ... bez zmian
   id                Int      @id @default(autoincrement())
   purchaseDate      DateTime
   vendorName        String?
@@ -56,7 +57,8 @@ model Purchase {
   quotationItemUsages QuotationItemUsage[]
 }
 
-// === MODELE CRM ===
+// ... reszta modeli (Client, Order, itd.) pozostaje BEZ ZMIAN z poprzedniej wersji ...
+// ... (Wklejam je poniżej, żebyś miał cały, kompletny plik) ...
 
 model Client {
   id      Int      @id @default(autoincrement())
@@ -68,8 +70,6 @@ model Client {
   notes   String?
   orders  Order[]
 }
-
-// === MODELE ZAMÓWIEŃ I WYCEN ===
 
 model Order {
   id              Int      @id @default(autoincrement())
@@ -153,8 +153,6 @@ model QuotationItemUsage {
   purchaseId     Int
 }
 
-// === MODUŁ FAKTUROWANIA ===
-
 model Invoice {
   id             Int      @id @default(autoincrement())
   invoiceNumber  String   @unique
@@ -172,14 +170,12 @@ model Invoice {
   orderId        Int      @unique
 }
 
-// === MODUŁ USTAWIEŃ I NOTATEK ===
-
 model AppSettings {
-  id                     Int    @id @default(1)
-  companyName            String
-  companyNip             String
-  companyAddress         String
-  bankAccount            String
+  id             Int    @id @default(1)
+  companyName    String
+  companyNip     String
+  companyAddress String
+  bankAccount    String
   invoiceNumberingFormat String
 }
 
